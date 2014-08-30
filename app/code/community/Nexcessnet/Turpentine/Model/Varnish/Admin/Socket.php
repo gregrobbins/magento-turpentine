@@ -82,7 +82,7 @@ class Nexcessnet_Turpentine_Model_Varnish_Admin_Socket {
     // varnish default, can only be changed at Varnish startup time
     // if data to write is over this limit the actual run-time limit is checked
     // and used
-    const CLI_CMD_LENGTH_LIMIT  = 8192;
+    const CLI_CMD_LENGTH_LIMIT  = 16834;
 
     /**
      * VCL config versions, should match config select values
