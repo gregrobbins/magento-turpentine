@@ -83,15 +83,19 @@ class Nexcessnet_Turpentine_Model_Observer_Ban extends Varien_Event_Observer {
      */
     public function banProductPageCache( $eventObject ) {
         if( Mage::helper( 'turpentine/varnish' )->getVarnishEnabled() ) {
+            $banHelper = Mage::helper( 'turpentine/ban' );
             $product = $eventObject->getProduct();
-            $urlPattern = Mage::helper( 'turpentine/ban' )
-                ->getProductBanRegex( $product );
+            $urlPattern = $banHelper->getProductBanRegex( $product );
             $result = $this->_getVarnishAdmin()->flushUrl( $urlPattern );
             Mage::dispatchEvent( 'turpentine_ban_product_cache', $result );
             $cronHelper = Mage::helper( 'turpentine/cron' );
             if( $this->_checkResult( $result ) &&
                     $cronHelper->getCrawlerEnabled() ) {
                 $cronHelper->addProductToCrawlerQueue( $product );
+                foreach( $banHelper->getParentProducts( $product )
+                        as $parentProduct ) {
+                    $cronHelper->addProductToCrawlerQueue( $parentProduct );
+                }
             }
         }
     }
@@ -108,7 +112,7 @@ class Nexcessnet_Turpentine_Model_Observer_Ban extends Varien_Event_Observer {
     public function banProductPageCacheCheckStock( $eventObject ) {
         if( Mage::helper( 'turpentine/varnish' )->getVarnishEnabled() ) {
             $item = $eventObject->getItem();
-            if( $item->getStockStatusChangedAuto() ||
+            if( $item->getStockStatusChangedAutomatically() ||
                     ( $item->getOriginalInventoryQty() <= 0 &&
                         $item->getQty() > 0 &&
                         $item->getQtyCorrection() > 0 ) ) {
@@ -125,7 +129,7 @@ class Nexcessnet_Turpentine_Model_Observer_Ban extends Varien_Event_Observer {
                     $cronHelper->addProductToCrawlerQueue( $product );
                     foreach( $banHelper->getParentProducts( $product )
                             as $parentProduct ) {
-                        $cronHelper->addProductToCrawlerQueue( $product );
+                        $cronHelper->addProductToCrawlerQueue( $parentProduct );
                     }
                 }
             }
@@ -276,12 +280,17 @@ class Nexcessnet_Turpentine_Model_Observer_Ban extends Varien_Event_Observer {
             implode( '|', array_unique( $productIds ) ) );
         $patterns[] = sprintf( '/review/product/view/id/%d/',
             $review->getEntityId() );
-        $patterns[] = sprintf( '(?:%s)', implode( '|',
-            array_unique( array_map(
-                create_function( '$p',
-                    'return $p->getUrlModel()->formatUrlKey( $p->getName() );' ),
-                $products ) )
-        ) );
+        $productPatterns = array();
+        foreach ( $products as $p ) {
+            $urlKey = $p->getUrlModel()->formatUrlKey( $p->getName() );
+            if ( $urlKey ) {
+                $productPatterns[] = $urlKey;
+            }
+        }
+        if ( !empty($productPatterns) ) {
+            $productPatterns = array_unique( $productPatterns );
+            $patterns[] = sprintf( '(?:%s)', implode( '|', $productPatterns ) );
+        }
         $urlPattern = implode( '|', $patterns );
 
         $result = $this->_getVarnishAdmin()->flushUrl( $urlPattern );

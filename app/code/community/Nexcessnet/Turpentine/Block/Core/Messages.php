@@ -55,6 +55,7 @@ class Nexcessnet_Turpentine_Block_Core_Messages extends Mage_Core_Block_Messages
         'customer',
         'review',
         'wishlist',
+        'core',
     );
 
     /**
@@ -82,8 +83,11 @@ class Nexcessnet_Turpentine_Block_Core_Messages extends Mage_Core_Block_Messages
      * @return  Mage_Core_Block_Messages
      */
     public function setMessages( Mage_Core_Model_Message_Collection $messages ) {
-        parent::setMessages( $messages );
-        $this->_saveMessages( $messages->getItems() );
+        if( $this->_fixMessages() ) {
+            $this->_saveMessages( $messages->getItems() );
+        } else {
+            parent::setMessages( $messages );
+        }
         return $this;
     }
 
@@ -94,8 +98,11 @@ class Nexcessnet_Turpentine_Block_Core_Messages extends Mage_Core_Block_Messages
      * @return Mage_Core_Block_Messages
      */
     public function addMessages( Mage_Core_Model_Message_Collection $messages ) {
-        parent::addMessages( $messages );
-        $this->_saveMessages( $messages->getItems() );
+        if( $this->_fixMessages() ) {
+            $this->_saveMessages( $messages->getItems() );
+        } else {
+            parent::addMessages( $messages );
+        }
         return $this;
     }
 
@@ -106,8 +113,11 @@ class Nexcessnet_Turpentine_Block_Core_Messages extends Mage_Core_Block_Messages
      * @return  Mage_Core_Block_Messages
      */
     public function addMessage( Mage_Core_Model_Message_Abstract $message ) {
-        parent::addMessage( $message );
-        $this->_saveMessages( array( $message ) );
+        if( $this->_fixMessages() ) {
+            $this->_saveMessages( $message->getItems() );
+        } else {
+            parent::addMessage( $message );
+        }
         return $this;
     }
 
@@ -266,7 +276,7 @@ class Nexcessnet_Turpentine_Block_Core_Messages extends Mage_Core_Block_Messages
     protected function _loadSavedMessages() {
         $session = Mage::getSingleton( 'turpentine/session' );
         foreach( $session->loadMessages( $this->getNameInLayout() ) as $msg ) {
-            $this->getMessageCollection()->add( $msg );
+            parent::addMessage( $msg );
         }
         $this->_clearMessages();
     }
@@ -280,7 +290,7 @@ class Nexcessnet_Turpentine_Block_Core_Messages extends Mage_Core_Block_Messages
     protected function _loadMessagesFromStorage( $type ) {
         foreach( Mage::getSingleton( $type )
                     ->getMessages( true )->getItems() as $msg ) {
-            $this->addMessage( $msg );
+            parent::addMessage( $msg );
         }
     }
 
@@ -343,10 +353,7 @@ class Nexcessnet_Turpentine_Block_Core_Messages extends Mage_Core_Block_Messages
      * @return boolean
      */
     protected function _isEsiRequest() {
-        $liveReq = Mage::app()->getRequest();
-        $dummyReq = Mage::helper( 'turpentine/esi' )->getDummyRequest();
-        return $liveReq->getModuleName() === $dummyReq->getModuleName() &&
-            $liveReq->getControllerName() === $dummyReq->getControllerName() &&
-            $liveReq->getActionName() === $dummyReq->getActionName();
+        return is_a( Mage::app()->getRequest(),
+            'Nexcessnet_Turpentine_Model_Dummy_Request' );
     }
 }

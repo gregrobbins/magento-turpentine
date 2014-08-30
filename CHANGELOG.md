@@ -198,7 +198,7 @@ that have been done to the ESI layout will need to be updated
 
 There are changes to the ESI layout syntax (again) in this release, any
 customizations that have been done to the ESI layout or added for custom blocks
-will need to be updated and moved to the `layout.xml` file. Additionally, the
+will need to be updated and moved to the `local.xml` file. Additionally, the
 Varnish cache will need to be fully flushed or cached pages that reference
 previously cached ESI blocks will not load those blocks
 
@@ -286,3 +286,70 @@ This is the first release of Turpentine marked "stable" in Magento Connect
   * Disabled caching of the product comparison popup in the default ESI policy.
   This does not affect the product comparison *block*, only the popup window
   showing the actual comparison
+
+### RELEASE-0.5.4
+
+  * Fixed the Varnish-generated *frontend* cookie occasionally being set with
+  the wrong path when Magento was located in a subdirectory instead of the
+  root of the site
+  * The built-in crawler should no longer try to crawl products that are not
+  visible in the frontend
+  * Missing blocks caused by layout changes between different handles should be
+  handled more gracefully by Turpentine now
+  * Parent products will also be banned when a child product goes out of stock
+  or is saved
+  * Fixed CMS URL generation for the built-in crawler
+  * Fixed product stock change check to actually work
+  * Improved the dummy request mock up. It should have all expected fields
+  populated now and changes to it will not affect the global state or original
+  request
+  * Added a Magento shell script (util/varnishadm.php) that can be used like
+  the real `varnishadm` command for users who aren't able to use real
+  `varnishadm` command
+  * Fixed duplicate flash messages experienced in some cases (thanks to
+  @craigcarnell)
+  * Made the `custom_include.vcl` file's location configurable, see the new
+  *Custom VCL File Location* option
+  * Added template parsing to the custom include VCL file, `{{variable}}`
+  replacement will now also work in this file
+  * Added a toggle-able Varnish Bypass to Cache Management page for bypassing
+  the cache (including ESI) for a single *admin* session (thanks to @alexandre-jardin)
+  * Varnish will now strip the Google-related parameters from the request to
+  increase cache hit-rate
+
+### RELEASE-0.5.5
+
+  * Made VCL templates slightly shorter to help with running into the inline
+  VCL character limit
+  * The `warm-cache.sh` script now respects the `PROC` environment variable for
+  the number of processes to use while warming the cache
+  * [#253] Fixed VCL to correctly identify Chrome on OS X
+  * [#281] Fixed unintentional flushing of full cache in some cases (thanks
+  @jeroenvermeulen)
+  * [#301] Fixed IE caching AJAX ESI includes (thanks @nickbock)
+  * [#320] AJAX ESI should be compatible with themes that use jQuery instead of
+  Prototype (thanks @steverice)
+  * [#334] Bad URIs that cause the dummy request creation to throw an exception
+  will now log the bad URI and hide the exception when debugging is disabled
+  (thanks @ajardin)
+  * [#337] Improve layout handle searching for ESI blocks in some cases (thanks
+  @sanbornm)
+  * [#356] Fix ESI blocks not rendering child blocks (thanks @magedev)
+  * Changed Varnish-generated session ID format for compatibility with the
+  SFC_Kount extension
+  * Failures during advanced registry loading in ESI requests should be handled
+  more gracefully
+
+### RELEASE-0.6.0
+
+This release *requires* a small addition to Varnish's configuration when used with
+Magento CE 1.8+ or EE 1.13+, see [these instructions](https://github.com/nexcess/magento-turpentine/wiki/FAQ#wiki-i-upgraded-to-turpentine-06-and-are-the-add-to-cart-buttons-look-broken)
+
+  * [#362] Fixed ESI detection for message block (thanks @eth8505)
+  * [#380] Fixed ESI cache flushes not firing in some cases (thanks @gabrielsomoza)
+  * [#391] Added Magento Composer Installer support (thanks @ajardin)
+  * [#405] Fixed disabling Varnish bypass (thanks @ajardin)
+  * [#438] Implemented ban lurker-friendly bans (thanks @jeroenvermeulen)
+  * [#443] Fixed caching of static assets when the *Add Store Code to Urls* option
+  is enabled (thanks @jeroenvermeulen)
+  * [#345] Fixed compatibility with Magento CE 1.8 and EE 1.13

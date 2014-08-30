@@ -41,19 +41,6 @@ C{
 {{debug_acl}}
 
 ## Custom Subroutines
-sub remove_cache_headers {
-    # remove cache headers so we can set our own
-    remove beresp.http.Cache-Control;
-    remove beresp.http.Expires;
-    remove beresp.http.Pragma;
-    remove beresp.http.Cache;
-    remove beresp.http.Age;
-}
-
-sub remove_double_slashes {
-    # remove double slashes from the URL, for higher cache hit rate
-    set req.url = regsub(req.url, "(.*)//+(.*)", "\1/\2");
-}
 
 sub generate_session {
     # generate a UUID and add `frontend=$UUID` to the Cookie header, or use SID
@@ -112,28 +99,28 @@ sub vcl_recv {
         }
     }
 
-    # We only deal with GET and HEAD by default
-    if (!(req.request ~ "^(GET|HEAD)$")) {
-        return (pipe);
-    }
-
-    call remove_double_slashes;
-
-    {{normalize_encoding}}
-    {{normalize_user_agent}}
-    {{normalize_host}}
-
     # varnish 2.1 doesn't support bare booleans so we have to add these
     # as headers to the req so they've available throught the VCL
     set req.http.X-Opt-Enable-Caching = "{{enable_caching}}";
     set req.http.X-Opt-Force-Static-Caching = "{{force_cache_static}}";
     set req.http.X-Opt-Enable-Get-Excludes = "{{enable_get_excludes}}";
 
+    # We only deal with GET and HEAD by default
     # we test this here instead of inside the url base regex section
     # so we can disable caching for the entire site if needed
-    if (req.http.X-Opt-Enable-Caching != "true" || req.http.Authorization) {
+    if (req.http.X-Opt-Enable-Caching != "true" || req.http.Authorization ||
+            !(req.request ~ "^(GET|HEAD)$") ||
+            req.http.Cookie ~ "varnish_bypass={{secret_handshake}}") {
         return (pipe);
     }
+
+    # remove double slashes from the URL, for higher cache hit rate
+    set req.url = regsuball(req.url, "(.*)//+(.*)", "\1/\2");
+
+    {{normalize_encoding}}
+    {{normalize_user_agent}}
+    {{normalize_host}}
+
     # check if the request is for part of magento
     if (req.url ~ "{{url_base_regex}}") {
         # set this so Turpentine can see the request passed through Varnish
@@ -152,7 +139,7 @@ sub vcl_recv {
                 req.http.Cookie, ".*\bstore=([^;]*).*", "\1");
         }
         # looks like an ESI request, add some extra vars for further processing
-        if (req.url ~ "/turpentine/esi/getBlock/") {
+        if (req.url ~ "/turpentine/esi/get(?:Block|FormKey)/") {
             set req.http.X-Varnish-Esi-Method = regsub(
                 req.url, ".*/{{esi_method_param}}/(\w+)/.*", "\1");
             set req.http.X-Varnish-Esi-Access = regsub(
@@ -190,19 +177,23 @@ sub vcl_recv {
         # this doesn't need a enable_url_excludes because we can be reasonably
         # certain that cron.php at least will always be in it, so it will
         # never be empty
-        if (req.url ~ "{{url_base_regex}}(?:{{url_excludes}})") {
-            return (pipe);
-        }
-        if (req.url ~ "\?.*__from_store=") {
-            # user switched stores. we pipe this instead of passing below because
-            # switching stores doesn't redirect (302), just acts like a link to
-            # another page (200) so the Set-Cookie header would be removed
+        if (req.url ~ "{{url_base_regex}}(?:{{url_excludes}})" ||
+                # user switched stores. we pipe this instead of passing below because
+                # switching stores doesn't redirect (302), just acts like a link to
+                # another page (200) so the Set-Cookie header would be removed
+                req.url ~ "\?.*__from_store=") {
             return (pipe);
         }
         if (req.http.X-Opt-Enable-Get-Excludes == "true" &&
                 req.url ~ "(?:[?&](?:{{get_param_excludes}})(?=[&=]|$))") {
             return (pass);
         }
+        if (req.url ~ "[?&](utm_source|utm_medium|utm_campaign|gclid|cx|ie|cof|siteurl)=") {
+            # Strip out Google related parameters
+            set req.url = regsuball(req.url, "(?:(\?)?|&)(?:utm_source|utm_medium|utm_campaign|gclid|cx|ie|cof|siteurl)=[^&]+", "\1");
+            set req.url = regsuball(req.url, "(?:(\?)&|\?$)", "\1");
+        }
+
         return (lookup);
     }
     # else it's not part of magento so do default handling (doesn't help
@@ -235,9 +226,15 @@ sub vcl_hash {
         # make sure we give back the right encoding
         set req.hash += req.http.Accept-Encoding;
     }
-    # make sure data is for the right store and currency based on the *store*
-    # and *currency* cookies
-    set req.hash += "s=" req.http.X-Varnish-Store "&c=" req.http.X-Varnish-Currency;
+    if (req.http.X-Varnish-Store || req.http.X-Varnish-Currency) {
+        # make sure data is for the right store and currency based on the *store*
+        # and *currency* cookies
+        set req.hash += "s=";
+        set req.hash += req.http.X-Varnish-Store;
+        set req.hash += "&c=";
+        set req.hash += req.http.X-Varnish-Currency;
+    }
+
     if (req.http.X-Varnish-Esi-Access == "private" &&
             req.http.Cookie ~ "frontend=") {
         set req.hash += regsub(req.http.Cookie, "^.*?frontend=([^;]*);*.*$", "\1");
@@ -261,6 +258,10 @@ sub vcl_fetch {
     # set the grace period
     set req.grace = {{grace_period}}s;
 
+    # Store the URL in the response object, we need this to do lurker friendly bans later
+    set beresp.http.X-Varnish-Host = req.http.host;
+    set beresp.http.X-Varnish-URL = req.url;
+
     # if it's part of magento...
     if (req.url ~ "{{url_base_regex}}") {
         # we handle the Vary stuff ourselves for now, we'll want to actually
@@ -280,7 +281,11 @@ sub vcl_fetch {
                 remove beresp.http.Set-Cookie;
             }
             # we'll set our own cache headers if we need them
-            call remove_cache_headers;
+            remove beresp.http.Cache-Control;
+            remove beresp.http.Expires;
+            remove beresp.http.Pragma;
+            remove beresp.http.Cache;
+            remove beresp.http.Age;
 
             if (beresp.http.X-Turpentine-Esi == "1") {
                 esi;
@@ -334,14 +339,16 @@ sub vcl_deliver {
         # need to set the set-cookie header since we just made it out of thin air
         call generate_session_expires;
         set resp.http.Set-Cookie = req.http.X-Varnish-Faked-Session "; expires="
-            resp.http.X-Varnish-Cookie-Expires "; path="
-            regsub(regsub(req.url, "{{url_base_regex}}.*", "\1"), "^(.+)/$", "\1");
+            resp.http.X-Varnish-Cookie-Expires "; path=/";
         if (req.http.Host) {
             set resp.http.Set-Cookie = resp.http.Set-Cookie
                 "; domain=" regsub(req.http.Host, ":\d+$", "");
         }
         set resp.http.Set-Cookie = resp.http.Set-Cookie "; HttpOnly";
         remove resp.http.X-Varnish-Cookie-Expires;
+    }
+    if (req.http.X-Varnish-Esi-Method == "ajax" && req.http.X-Varnish-Esi-Access == "private") {
+        set resp.http.Cache-Control = "no-cache";
     }
     set resp.http.X-Opt-Debug-Headers = "{{debug_headers}}";
     if (resp.http.X-Opt-Debug-Headers == "true" || client.ip ~ debug_acl ) {
@@ -362,6 +369,8 @@ sub vcl_deliver {
         remove resp.http.X-Turpentine-Flush-Events;
         remove resp.http.X-Turpentine-Block;
         remove resp.http.X-Varnish-Session;
+        remove resp.http.X-Varnish-Host;
+        remove resp.http.X-Varnish-URL;
         # this header indicates the session that originally generated a cached
         # page. it *must* not be sent to a client in production with lax
         # session validation or that session can be hijacked

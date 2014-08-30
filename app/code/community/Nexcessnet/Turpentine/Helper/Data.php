@@ -41,6 +41,13 @@ class Nexcessnet_Turpentine_Helper_Data extends Mage_Core_Helper_Abstract {
     const HASH_ALGORITHM    = 'sha256';
 
     /**
+     * Cookie name for the Varnish bypass
+     *
+     * @var string
+     */
+    const BYPASS_COOKIE_NAME  = 'varnish_bypass';
+
+    /**
      * encryption singleton thing
      *
      * @var Mage_Core_Model_Encryption
@@ -264,6 +271,15 @@ class Nexcessnet_Turpentine_Helper_Data extends Mage_Core_Helper_Abstract {
     }
 
     /**
+     * Get the cookie name for the Varnish bypass
+     *
+     * @return string
+     */
+    public function getBypassCookieName() {
+        return self::BYPASS_COOKIE_NAME;
+    }
+
+    /**
      * The actual recursive implementation of getChildBlockNames
      *
      * @param  Mage_Core_Model_Layout_Element $blockNode
@@ -276,6 +292,15 @@ class Nexcessnet_Turpentine_Helper_Data extends Mage_Core_Helper_Abstract {
             foreach( $blockNode->xpath( './block | ./reference' ) as $childBlockNode ) {
                 $blockNames = array_merge( $blockNames,
                     $this->_getChildBlockNames( $childBlockNode ) );
+                if( $this->getLayout() instanceof Varien_Simplexml_Config ) {
+                    foreach( $this->getLayout()->getNode()->xpath( sprintf(
+                        '//reference[@name=\'%s\']', (string)$childBlockNode['name'] ) )
+                            as $childBlockLayoutNode ) {
+                        $blockNames = array_merge( $blockNames,
+                            $this->_getChildBlockNames( $childBlockLayoutNode ) );
+
+                    }
+                }
             }
         } else {
             $blockNames = array();

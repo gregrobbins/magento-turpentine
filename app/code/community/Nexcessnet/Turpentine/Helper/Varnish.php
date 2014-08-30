@@ -155,4 +155,65 @@ class Nexcessnet_Turpentine_Helper_Varnish extends Mage_Core_Helper_Abstract {
         return Mage::helper( 'turpentine/data' )->useProductListToolbarFix() &&
             Mage::app()->getStore()->getCode() !== 'admin';
     }
+
+    /**
+     * Check if the Varnish bypass is enabled
+     *
+     * @return boolean
+     */
+    public function isBypassEnabled() {
+        $cookieName = Mage::helper( 'turpentine/data' )->getBypassCookieName();
+        $cookieValue = Mage::getModel( 'core/cookie' )->get( $cookieName );
+
+        return $cookieValue === $this->getSecretHandshake();
+    }
+
+    /**
+     * Check if the notification about the Varnish bypass must be displayed
+     *
+     * @return boolean
+     */
+    public function shouldDisplayNotice() {
+        return $this->getVarnishEnabled() && $this->isBypassEnabled();
+    }
+
+    public function getFormKeyFixupActionsList() {
+        $data = Mage::getStoreConfig(
+            'turpentine_varnish/miscellaneous/formkey_fixup_actions' );
+        $actions = array_filter( explode( PHP_EOL, trim( $data ) ) );
+        return $actions;
+    }
+
+    /**
+     * Check if this is a version of Magento that needs the form_key fix.
+     * Relevant versions are:
+     *
+     *     CE 1.8+
+     *     EE 1.13+
+     *
+     * @return bool
+     */
+    public function csrfFixupNeeded() {
+        $result = false;
+        $isEnterprise = false; // ce
+        if( method_exists( 'Mage', 'getEdition' ) ) {
+            if( Mage::getEdition() === Mage::EDITION_ENTERPRISE ) {
+                $isEnterprise = true;
+            }
+        } else {
+            if( Mage::getConfig()->getModuleConfig( 'Enterprise_Enterprise' ) ) {
+                $isEnterprise = true;
+            }
+        }
+        if( $isEnterprise ) {
+            if( version_compare( Mage::getVersion(), '1.13', '>=' ) ) {
+                $result = true;
+            }
+        } else {
+            if( version_compare( Mage::getVersion(), '1.8', '>=' ) ) {
+                $result = true;
+            }
+        }
+        return $result;
+    }
 }

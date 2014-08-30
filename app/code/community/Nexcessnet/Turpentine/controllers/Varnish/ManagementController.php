@@ -196,6 +196,51 @@ class Nexcessnet_Turpentine_Varnish_ManagementController
     }
 
     /**
+     * Activate or deactivate the Varnish bypass
+     *
+     * @return void
+     */
+    public function switchNavigationAction() {
+        $type = $this->getRequest()->get( 'type' );
+        if( is_null( $type ) ) {
+            $this->_redirect( 'noRoute' );
+            return;
+        }
+
+        $cookieName     = Mage::helper( 'turpentine' )->getBypassCookieName();
+        $cookieModel    = Mage::getModel( 'core/cookie' );
+        $adminSession   = Mage::getSingleton( 'adminhtml/session' );
+
+        switch( $type ) {
+            case 'default':
+                $cookieModel->set(
+                    $cookieName,
+                    Mage::helper( 'turpentine/varnish' )->getSecretHandshake(),
+                    null, // period
+                    null, // path
+                    null, // domain
+                    false, // secure
+                    true ); // httponly
+                $adminSession->addSuccess( Mage::helper( 'turpentine/data' )
+                    ->__( 'The Varnish bypass cookie has been successfully added.' ) );
+            break;
+
+            case 'varnish':
+                $cookieModel->delete( $cookieName );
+                $adminSession->addSuccess( Mage::helper( 'turpentine/data' )
+                    ->__( 'The Varnish bypass cookie has been successfully removed.' ) );
+            break;
+
+            default:
+                $adminSession->addError( Mage::helper( 'turpentine/data' )
+                    ->__( 'The given navigation type is not supported!' ) );
+            break;
+        }
+
+        $this->_redirectReferer();
+    }
+
+    /**
      * Check if a visitor is allowed access to this controller/action(?)
      *
      * @return boolean
