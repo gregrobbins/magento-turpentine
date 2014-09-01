@@ -141,6 +141,22 @@
                 </params>
             </action>
         </reference>
+
+        <!-- mrwonderful: cookienotice -->
+        <!-- https://github.com/nexcess/magento-turpentine/wiki/ESI_Cache_Policy -->
+        <reference name="optimiseweb_cookienotice">
+            <action method="setEsiOptions">
+                <params>
+                    <access>private</access>
+                    <method>esi</method>
+                    <scope>global</scope>
+                    <ttl>2592000</ttl>
+                    <dummy_blocks>
+                        <before_body_end/>
+                    </dummy_blocks>
+                </params>
+            </action>
+        </reference>
     </default>
 
     <!-- Blocks only visible when logged in -->
