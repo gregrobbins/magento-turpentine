@@ -139,6 +139,10 @@ sub vcl_recv {
             set req.http.X-Varnish-Store = regsub(
                 req.http.Cookie, ".*\bstore=([^;]*).*", "\1");
         }
+        if (req.http.Cookie ~ "\bow_cookie_notice=") {
+            set req.http.X-Varnish-Cookienotice = regsub(
+                req.http.Cookie, ".*\bow_cookie_notice=([^;]*).*", "\1");
+        }
         # looks like an ESI request, add some extra vars for further processing
         if (req.url ~ "/turpentine/esi/get(?:Block|FormKey)/") {
             set req.http.X-Varnish-Esi-Method = regsub(
@@ -225,10 +229,10 @@ sub vcl_hash {
         # make sure we give back the right encoding
         hash_data(req.http.Accept-Encoding);
     }
-    if (req.http.X-Varnish-Store || req.http.X-Varnish-Currency) {
+    if (req.http.X-Varnish-Store || req.http.X-Varnish-Currency || req.http.X-Varnish-Cookienotice) {
         # make sure data is for the right store and currency based on the *store*
         # and *currency* cookies
-        hash_data("s=" + req.http.X-Varnish-Store + "&c=" + req.http.X-Varnish-Currency);
+        hash_data("s=" + req.http.X-Varnish-Store + "&c=" + req.http.X-Varnish-Currency + "&n=" + req.http.X-Varnish-Cookienotice);
     }
 
     if (req.http.X-Varnish-Esi-Access == "private" &&
@@ -356,6 +360,7 @@ sub vcl_deliver {
         set resp.http.X-Varnish-Esi-Access = req.http.X-Varnish-Esi-Access;
         set resp.http.X-Varnish-Currency = req.http.X-Varnish-Currency;
         set resp.http.X-Varnish-Store = req.http.X-Varnish-Store;
+        set resp.http.X-Varnish-Cookienotice = req.http.X-Varnish-Cookienotice;
     } else {
         # remove Varnish fingerprints
         unset resp.http.X-Varnish;
