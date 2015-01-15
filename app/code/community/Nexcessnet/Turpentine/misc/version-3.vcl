@@ -185,6 +185,12 @@ sub vcl_recv {
                 req.url ~ "\?.*__from_store=") {
             return (pipe);
         }
+        # Mr Wonderful fix
+        # We don't want to catch some homepages like /tiendas/ and the previous condition doesn't have this option
+        # In this condition we will check again the url_excludes without the url_base_regex
+        if (req.url ~ "({{url_excludes}})") {
+            return (pipe);
+        }
         if ({{enable_get_excludes}} &&
                 req.url ~ "(?:[?&](?:{{get_param_excludes}})(?=[&=]|$))") {
             # TODO: should this be pass or pipe?
